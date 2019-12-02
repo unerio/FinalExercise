@@ -30,7 +30,7 @@ stages:
   displayName: Build stage
   jobs:  
   - job: Build
-    displayName: Build
+    displayName: Build job
     pool:
       vmImage: $(vmImageName)
     steps:
@@ -44,64 +44,46 @@ stages:
         tags: |
           $(tag)
           
-    - upload: charts
-      artifact: charts
+    - task: PublishPipelineArtifact@1
+      inputs:
+        artifactName: 'manifests'
+        path: 'manifests'
 
 - stage: Deploy
   displayName: Deploy stage
   dependsOn: Build
-
   jobs:
   - deployment: Deploy
-    displayName: Deploy
+    displayName: Deploy job
     pool:
       vmImage: $(vmImageName)
-    environment: 'unerioFinalExercise.default'
+    environment: 'shashankbarsinpipelinesjavascriptdocker.aksnamespace'
     strategy:
       runOnce:
         deploy:
           steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              artifactName: 'manifests'
+              downloadPath: '$(System.ArtifactsDirectory)/manifests'
+
           - task: KubernetesManifest@0
             displayName: Create imagePullSecret
             inputs:
               action: createSecret
               secretName: $(imagePullSecret)
+              namespace: $(k8sNamespace)
               dockerRegistryEndpoint: $(dockerRegistryServiceConnection)
-
-          - task: AzureCLI@2
-            displayName: get host suffix
-            inputs:
-              scriptType: pscore
-              scriptLocation: inlineScript
-              azureSubscription: $(azureConnection)
-              inlineScript: |
-                $clusterId="/subscriptions/96722c76-9eea-4ad2-8fcc-7abda91808e4/resourcegroups/FHWN-19-CK/providers/Microsoft.ContainerService/managedClusters/FHWN-19-CK"
-                $resourceGroupName=$(cut -d '/' -f5 <<< "$clusterId")
-                $clusterName=$(cut -d '/' -f9 <<< "$clusterId")
-                az aks use-dev-spaces -n $clusterName -g $resourceGroupName -s default -y
-                $hostSuffix=$(azds show-context -o json | ConvertFrom-Json).controller.hostSuffix
-                echo "##vso[task.setvariable variable=HostSuffix]$hostSuffix"
-
-          - task: KubernetesManifest@0
-            displayName: Bake manifests
-            name: bake
-            inputs:
-              action: bake
-              helmChart: $(Pipeline.Workspace)/charts/devspaces-v0.0.1.tgz
-              overrides: |
-                image.repository:$(containerRegistry)/$(imageRepository)
-                service.port:8080 
-                ingress.enabled:true
-                ingress.hostname:app.$(HostSuffix)
               
           - task: KubernetesManifest@0
             displayName: Deploy to Kubernetes cluster
             inputs:
               action: deploy
+              namespace: $(k8sNamespace)
               manifests: |
-                $(bake.manifestsBundle)
+                $(System.ArtifactsDirectory)/manifests/deployment.yml
+                $(System.ArtifactsDirectory)/manifests/service.yml
               imagePullSecrets: |
                 $(imagePullSecret)
               containers: |
                 $(containerRegistry)/$(imageRepository):$(tag)
-
