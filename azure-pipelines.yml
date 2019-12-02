@@ -46,8 +46,8 @@ stages:
           
     - task: PublishPipelineArtifact@1
       inputs:
-        artifactName: 'manifests'
-        path: 'manifests'
+        artifactName: 'charts'
+        path: 'charts'
 
 - stage: Deploy
   displayName: Deploy stage
