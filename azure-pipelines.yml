@@ -57,7 +57,7 @@ stages:
     displayName: Deploy job
     pool:
       vmImage: $(vmImageName)
-    environment: 'shashankbarsinpipelinesjavascriptdocker.aksnamespace'
+    environment: 'unerioFinalExercise.default'
     strategy:
       runOnce:
         deploy:
